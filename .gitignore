@@ -1,0 +1,42 @@
+# Windows:
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+ 
+# Project:
+*.csproj
+*.vsconfig
+*.sln
+.svn
+.idea
+.vs
+Library
+Logs
+MemoryCaptures
+obj
+ProjectSettings/RiderScriptEditorPersistedState.asset
+ServerData
+Temp
+UserSettings
+
+# Assets:
+ZTest
+ZTest.meta
+# Assets - Sponza :
+# Assets/ArtResources/PresetEnvs/Sponza/Assets
+# Assets/ArtResources/PresetEnvs/Sponza/Assets.meta
+# Assets/ArtResources/PresetEnvs/Sponza/Materials
+# Assets/ArtResources/PresetEnvs/Sponza/Materials.meta
+
+# Temp:
+# ta-workflow/
+
+# Assets/Scripts/ZSGameRP/Runtime/RenderPipelineResources/Texture
+# Assets/Scripts/ZSGameRP/Runtime/RenderPipelineResources/Texture.meta
+
+# Assets/ThirdParty/CCForUnityShader
+# Assets/ThirdParty/CCForUnityShader.meta
+
+# 
+
+

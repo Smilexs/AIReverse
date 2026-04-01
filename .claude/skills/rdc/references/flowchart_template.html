@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- [PLACEHOLDER: title] 格式: 渲染流程图 - [游戏名] ([API]) -->
+    <title>渲染流程图 - [游戏名] ([API])</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 10px; font-size: 32px; }
+
+        .subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px; }
+
+        .stats {
+            display: flex; justify-content: space-around; flex-wrap: wrap;
+            margin-bottom: 30px; padding: 20px;
+            background: #f8f9fa; border-radius: 8px; gap: 10px;
+        }
+        .stat-item { text-align: center; min-width: 100px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #3498db; }
+        .stat-label { font-size: 12px; color: #7f8c8d; margin-top: 5px; }
+
+        /* ── 筛选栏 ── */
+        .filter-bar {
+            display: flex; justify-content: center; flex-wrap: wrap;
+            gap: 8px; margin-bottom: 20px; padding: 15px;
+            background: #f8f9fa; border-radius: 8px;
+        }
+        .filter-btn {
+            padding: 6px 14px; border: 2px solid #ddd; border-radius: 20px;
+            background: white; cursor: pointer; font-size: 13px;
+            transition: all 0.3s; user-select: none;
+        }
+        .filter-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .filter-btn.active { color: white; border-color: transparent; }
+        .filter-btn[data-type="all"].active       { background: #2c3e50; }
+        .filter-btn[data-type="compute"].active    { background: #9b59b6; }
+        .filter-btn[data-type="scene"].active      { background: #3498db; }
+        .filter-btn[data-type="ui"].active         { background: #5b6abf; }
+        .filter-btn[data-type="postfx"].active     { background: #f39c12; }
+        .filter-btn[data-type="screen"].active     { background: #1abc9c; }
+        .filter-btn[data-type="composite"].active  { background: #34495e; }
+        .filter-btn[data-type="shadow"].active     { background: #7f8c8d; }
+
+        /* ── SVG 流程图 ── */
+        .flowchart { width: 100%; overflow-x: auto; padding: 20px 0; position: relative; }
+        svg { display: block; margin: 0 auto; transition: transform 0.3s ease; }
+
+        .node { cursor: pointer; transition: all 0.3s ease; }
+        .node:hover { filter: brightness(1.1); }
+        .node rect, .node ellipse {
+            filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));
+            transition: all 0.3s ease;
+        }
+        .node.highlighted rect, .node.highlighted ellipse {
+            filter: drop-shadow(0 0 12px rgba(52,152,219,0.8));
+            stroke: #3498db; stroke-width: 3;
+        }
+        .node.dimmed { opacity: 0.25; pointer-events: none; }
+
+        .arrow {
+            stroke: #95a5a6; stroke-width: 2; fill: none;
+            marker-end: url(#arrowhead); transition: opacity 0.3s;
+        }
+        .arrow.dimmed { opacity: 0.15; }
+        .arrow.highlighted { stroke: #3498db; stroke-width: 3; opacity: 1; }
+
+        /* ── Tooltip ── */
+        .tooltip {
+            position: fixed; background: rgba(20,20,30,0.96); color: white;
+            padding: 16px 20px; border-radius: 10px; font-size: 13px;
+            pointer-events: none; opacity: 0; transition: opacity 0.2s;
+            z-index: 1000; max-width: 380px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1); line-height: 1.6;
+        }
+        .tooltip .tt-title {
+            font-size: 15px; font-weight: bold; margin-bottom: 8px;
+            padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.15);
+        }
+        .tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+        .tooltip .tt-label { color: #95a5a6; }
+        .tooltip .tt-value { color: #ecf0f1; font-weight: 600; }
+        .tooltip .tt-bar {
+            height: 6px; background: rgba(255,255,255,0.1);
+            border-radius: 3px; margin-top: 8px; overflow: hidden;
+        }
+        .tooltip .tt-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .tooltip .tt-deps {
+            margin-top: 8px; padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 12px; color: #3498db;
+        }
+
+        /* ── 图例 / 指标 / 建议区块 ── */
+        .legend { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+        .legend h3 { margin-bottom: 15px; color: #2c3e50; }
+        .legend-items {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 10px; }
+        .legend-color { width: 30px; height: 20px; border-radius: 4px; border: 1px solid #ddd; }
+
+        /* ── 时间线 ── */
+        .timeline-container { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+        .timeline-container h3 { color: #2c3e50; margin-bottom: 15px; }
+        .timeline-bar-wrap {
+            position: relative; height: 48px; background: #ecf0f1;
+            border-radius: 6px; overflow: hidden; cursor: pointer;
+        }
+        .tl-segment {
+            position: absolute; top: 0; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 11px; font-weight: 600;
+            transition: all 0.3s; overflow: hidden; white-space: nowrap;
+        }
+        .tl-segment:hover { filter: brightness(1.2); z-index: 2; }
+        .tl-segment.highlighted { filter: brightness(1.3); box-shadow: 0 0 12px rgba(255,255,255,0.4); z-index: 3; }
+        .tl-segment.dimmed { opacity: 0.2; }
+        .timeline-ticks {
+            display: flex; justify-content: space-between;
+            margin-top: 4px; font-size: 11px; color: #7f8c8d;
+        }
+        .timeline-detail { margin-top: 12px; min-height: 30px; font-size: 13px; color: #555; transition: all 0.3s; }
+
+        /* ── 资源依赖分组卡片 ── */
+        .dep-section { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+        .dep-section h3 { color: #2c3e50; margin-bottom: 6px; }
+        .dep-section .dep-desc { font-size: 12px; color: #95a5a6; margin-bottom: 14px; }
+        .dep-flow { display: flex; flex-direction: column; gap: 0; }
+        .dep-group { position: relative; }
+        .dep-group-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 14px; font-size: 13px; font-weight: 700;
+            color: white; border-radius: 6px 6px 0 0;
+        }
+        .dep-group-body { background: white; border-radius: 0 0 6px 6px; padding: 10px 14px; }
+        .dep-group-connector { display: flex; justify-content: center; padding: 2px 0; }
+        .dep-group-connector svg { display: block; }
+        .dep-node {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 10px; margin: 3px 4px; border-radius: 5px;
+            font-size: 12px; cursor: pointer; transition: all 0.2s;
+            border: 1px solid rgba(0,0,0,0.08); background: #f8f9fa;
+        }
+        .dep-node:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); transform: translateY(-1px); }
+        .dep-node .dn-time { font-weight: 600; font-size: 11px; }
+        .dep-node .dn-arrow { color: #95a5a6; font-size: 11px; }
+        .dep-node .dn-src { font-size: 11px; color: #666; }
+        .dep-tag {
+            display: inline-block; padding: 0px 5px; border-radius: 3px;
+            font-size: 10px; font-weight: 600; margin-left: 2px; vertical-align: middle;
+        }
+        .dep-tag.color-buf { background: #ebf5fb; color: #2980b9; }
+        .dep-tag.depth-buf { background: #f4ecf7; color: #8e44ad; }
+        .dep-tag.ssbo-buf  { background: #fef9e7; color: #d68910; }
+
+        /* ── 键盘提示 ── */
+        .kbd-hint {
+            position: fixed; bottom: 20px; right: 20px;
+            background: rgba(0,0,0,0.75); color: #aaa;
+            padding: 10px 14px; border-radius: 8px;
+            font-size: 12px; line-height: 1.8; z-index: 999;
+            opacity: 0; transition: opacity 0.5s;
+        }
+        .kbd-hint kbd {
+            background: rgba(255,255,255,0.15);
+            padding: 1px 6px; border-radius: 3px; font-family: monospace;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            h1 { font-size: 22px; }
+            .stats { flex-direction: column; align-items: center; }
+            .dep-flow { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- [PLACEHOLDER: title] 替换为实际游戏名 -->
+        <h1>渲染流程图 - [游戏名]</h1>
+        <!-- [PLACEHOLDER: subtitle] 格式: [API] 渲染管线 | Frame [N] | 总耗时: [X]ms | 点击任意 Pass 查看依赖关系 -->
+        <div class="subtitle">[API] 渲染管线 | Frame [N] | 总耗时: [X]ms | 点击任意 Pass 查看依赖关系</div>
+
+        <!-- [PLACEHOLDER: stats] 根据 get_frame_summary 数据填充 -->
+        <div class="stats">
+            <div class="stat-item"><div class="stat-value">[N]</div><div class="stat-label">渲染通道</div></div>
+            <div class="stat-item"><div class="stat-value">[N]</div><div class="stat-label">Draw Calls</div></div>
+            <div class="stat-item"><div class="stat-value">[N]</div><div class="stat-label">Compute Dispatch</div></div>
+            <div class="stat-item"><div class="stat-value">[X]ms</div><div class="stat-label">GPU 总耗时</div></div>
+            <div class="stat-item"><div class="stat-value">[N]</div><div class="stat-label">纹理数</div></div>
+            <div class="stat-item"><div class="stat-value">[N]</div><div class="stat-label">缓冲区数</div></div>
+        </div>
+
+        <!--
+            [PLACEHOLDER: filter-bar]
+            根据实际出现的 Pass 类型生成筛选按钮。
+            可用类型: all, compute, scene, ui, postfx, screen, composite, shadow
+            只需包含本帧实际出现的类型。
+        -->
+        <div class="filter-bar">
+            <div class="filter-btn active" data-type="all">全部</div>
+            <!-- 按实际类型增减按钮 -->
+            <div class="filter-btn" data-type="compute">Compute</div>
+            <div class="filter-btn" data-type="scene">场景</div>
+            <div class="filter-btn" data-type="ui">UI</div>
+            <div class="filter-btn" data-type="postfx">后处理</div>
+            <div class="filter-btn" data-type="screen">屏幕空间</div>
+            <div class="filter-btn" data-type="composite">合成输出</div>
+        </div>
+
+        <!--
+            [PLACEHOLDER: flowchart-svg]
+            SVG 流程图区域，纵向排列每个 Pass。
+            SVG 高度根据 Pass 数量动态计算: 约 40 + N_passes * 130 px
+
+            每个 Pass 节点格式:
+            <g class="node" data-pass="[id]" data-type="[type]" data-time="[ms]" data-pct="[%]"
+               data-draws="[N]" data-dispatches="[N]" data-details="[详细信息，用 | 分隔]">
+                <rect x="450" y="[Y]" width="400" height="[H]" rx="8" fill="url(#grad-[type])"/>
+                <text ...>PASS #N: [语义名称]</text>
+                <text ...>[配置] | [耗时]</text>
+                <text ...>[Draw Call 信息]</text>
+                <!-- 性能热点 Pass 额外添加红色侧边条: -->
+                <rect x="820" y="[Y+5]" width="20" height="[H-10]" fill="#e74c3c" opacity="0.6" rx="3"/>
+                <text fill="#e74c3c">[X]%</text>
+            </g>
+
+            Pass 之间用箭头连接:
+            <line x1="650" y1="[Y1]" x2="650" y2="[Y2]" class="arrow" data-from="[id1]" data-to="[id2]"/>
+
+            SVG defs 中必须包含以下 gradient:
+            - grad-compute: 紫色 #9b59b6 → #8e44ad
+            - grad-scene:   蓝色 #3498db → #2980b9
+            - grad-ui:      靛蓝 #5b6abf → #4a58a5
+            - grad-postfx:  橙色 #f39c12 → #e67e22
+            - grad-screen:  青绿 #1abc9c → #16a085
+            - grad-composite: 深灰 #34495e → #2c3e50
+            - grad-present: 绿色 #27ae60 → #229954
+            以及 arrowhead marker。
+
+            同类型连续 Pass 可用分组标题:
+            <rect ... fill="#34495e" opacity="0.08"/>
+            <text>后处理链 POST-PROCESSING (N Passes, ~Xms)</text>
+        -->
+        <div class="flowchart">
+            <svg id="main-svg" width="1300" height="2500" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <polygon points="0 0, 10 3, 0 6" fill="#95a5a6" />
+                    </marker>
+                    <linearGradient id="grad-compute" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#9b59b6;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#8e44ad;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-scene" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#2980b9;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-ui" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#5b6abf;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#4a58a5;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-postfx" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#f39c12;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#e67e22;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-screen" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#1abc9c;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#16a085;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-composite" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#34495e;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#2c3e50;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-present" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#27ae60;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#229954;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad-shadow" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#7f8c8d;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#6c7a7d;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+
+                <!-- [PLACEHOLDER: svg-nodes] 按上述格式填充实际 Pass 节点和箭头 -->
+                <!-- 示例: FRAME START 起始节点 -->
+                <g class="node" data-pass="start" data-type="all">
+                    <ellipse cx="650" cy="40" rx="100" ry="30" fill="#2ecc71" stroke="#27ae60" stroke-width="2"/>
+                    <text x="650" y="48" text-anchor="middle" fill="white" font-size="16" font-weight="bold">FRAME START</text>
+                </g>
+
+                <!-- ... 各 Pass 节点 ... -->
+
+                <!-- 示例: PRESENT 结束节点 -->
+                <!--
+                <g class="node" data-pass="present" data-type="all">
+                    <ellipse cx="650" cy="[Y]" rx="120" ry="35" fill="url(#grad-present)"/>
+                    <text x="650" y="[Y]" text-anchor="middle" fill="white" font-size="16" font-weight="bold">PRESENT</text>
+                    <text x="650" y="[Y+18]" text-anchor="middle" fill="white" font-size="11">vkQueuePresentKHR</text>
+                </g>
+                -->
+            </svg>
+        </div>
+
+        <!-- 时间线：由 JS 从 passes 数组自动生成 -->
+        <div class="timeline-container">
+            <!-- [PLACEHOLDER: timeline-title] -->
+            <h3>性能时间线 (总计 [X]ms)</h3>
+            <div class="timeline-bar-wrap" id="timeline-bar"></div>
+            <div class="timeline-ticks">
+                <!-- [PLACEHOLDER: ticks] 根据总耗时生成 4-5 个刻度 -->
+                <span>0ms</span><span>[25%]ms</span><span>[50%]ms</span><span>[75%]ms</span><span>[total]ms</span>
+            </div>
+            <div class="timeline-detail" id="timeline-detail">悬停时间线查看 Pass 详情</div>
+        </div>
+
+        <!-- 资源依赖关系：由 JS 从 passes + groups 数组自动生成 -->
+        <div class="dep-section">
+            <h3>资源依赖关系</h3>
+            <p class="dep-desc">展示各阶段 Pass 之间的数据流向，标注 Buffer 类型。点击可高亮流程图中的对应节点。</p>
+            <div class="dep-flow" id="dep-flow"></div>
+        </div>
+
+        <!--
+            [PLACEHOLDER: legend]
+            图例说明：只包含本帧实际出现的 Pass 类型。
+            性能热点标记（红色 #e74c3c）始终包含。
+        -->
+        <div class="legend">
+            <h3>图例说明</h3>
+            <div class="legend-items">
+                <!-- 根据实际类型增减，示例: -->
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #9b59b6, #8e44ad);"></div><span>Compute Shader (GPU 计算)</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #3498db, #2980b9);"></div><span>主场景渲染 (Geometry)</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #5b6abf, #4a58a5);"></div><span>UI 渲染</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #f39c12, #e67e22);"></div><span>后处理效果 (Post-Processing)</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #1abc9c, #16a085);"></div><span>屏幕空间效果 (Screen Space)</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #34495e, #2c3e50);"></div><span>合成与输出 (Composite)</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div><span>性能热点标记</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: linear-gradient(135deg, #27ae60, #229954);"></div><span>Present 呈现 (显示输出)</span></div>
+            </div>
+        </div>
+
+        <!--
+            [PLACEHOLDER: metrics]
+            关键指标区块，分两栏：性能热点 Top 3 + 优化良好的部分
+        -->
+        <div class="legend" style="margin-top: 20px;">
+            <h3>关键指标</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                <div>
+                    <h4 style="color: #e74c3c; margin-bottom: 10px;">性能热点 Top 3</h4>
+                    <ul style="margin-left: 20px; color: #555;">
+                        <!-- [PLACEHOLDER: hotspots] 按耗时排序 -->
+                        <li><strong>[Pass名]</strong>: [X]ms ([X]%)</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="color: #27ae60; margin-bottom: 10px;">优化良好</h4>
+                    <ul style="margin-left: 20px; color: #555;">
+                        <!-- [PLACEHOLDER: good-parts] -->
+                        <li><strong>[Pass名]</strong>: 仅 [X]ms ([X]%)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!--
+            [PLACEHOLDER: suggestions]
+            优化建议区块，分高优先级和中优先级
+        -->
+        <div class="legend" style="margin-top: 20px;">
+            <h3>优化建议</h3>
+            <div style="color: #555; line-height: 1.8; margin-top: 10px;">
+                <p><strong style="color: #e74c3c;">高优先级:</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 15px;">
+                    <li>[具体建议，说明节省量]</li>
+                </ul>
+                <p><strong style="color: #f39c12;">中优先级:</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 15px;">
+                    <li>[具体建议]</li>
+                </ul>
+                <p><strong>预期效果:</strong> 总帧时间可优化至 <strong>[X]ms</strong> ([X]% 性能提升)</p>
+            </div>
+        </div>
+
+        <!-- [PLACEHOLDER: summary] 总体评价 -->
+        <div style="margin-top: 30px; padding: 20px; background: #e8f5e9; border-left: 4px solid #27ae60; border-radius: 4px;">
+            <p style="margin: 0; color: #2e7d32;"><strong>总体评价:</strong> [一段话总结渲染管线特点、优化空间和性能余量]</p>
+        </div>
+
+        <div style="margin-top: 20px; text-align: center; color: #95a5a6; font-size: 12px;">
+            <p>分析工具: RenderDoc | 日期: [YYYY-MM-DD] | 生成: Claude AI Assistant</p>
+            <p>捕获来源: [设备] | 分辨率: [WxH] | API: [Vulkan/D3D11/...]</p>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <div class="kbd-hint" id="kbd-hint">
+        <kbd>点击</kbd> Pass 高亮依赖链<br>
+        <kbd>Esc</kbd> 清除选中<br>
+        <kbd>滚轮</kbd> 缩放流程图
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        /*
+         * ══════════════════════════════════════════════════════════
+         * [PLACEHOLDER: data]
+         * 以下两个数据结构由 /rdc analyze 根据实际帧数据填充。
+         * ══════════════════════════════════════════════════════════
+         *
+         * passes 数组 — 每个 Pass 一项，按执行顺序排列。
+         * 字段说明:
+         *   id       — 唯一标识 (string)，如 'compute', 'pass1', 'pass2', ...
+         *   label    — 显示名称 (中文 + 英文专有名词)，如 'Pass 3: Bloom Extract'
+         *   time     — GPU 耗时 (float, ms)
+         *   color    — Pass 颜色 (hex)，按类型选择:
+         *                compute: '#9b59b6', scene: '#3498db', ui: '#5b6abf',
+         *                postfx: '#f39c12', screen: '#1abc9c', composite: '#34495e',
+         *                shadow: '#7f8c8d'
+         *   type     — 类型标签: 'compute' | 'scene' | 'ui' | 'postfx' | 'screen' | 'composite' | 'shadow'
+         *   deps     — 依赖的上游 Pass id 数组，如 ['pass1', 'pass8']
+         *   depType  — 与 deps 一一对应的 Buffer 类型数组: 'Color' | 'Depth' | 'SSBO'
+         *
+         * groups 数组 — 按渲染阶段分组，用于生成资源依赖关系卡片。
+         * 字段说明:
+         *   label  — 分组显示名称
+         *   color  — 分组标题颜色 (hex)
+         *   ids    — 该组包含的 pass id 数组
+         */
+
+        // [PLACEHOLDER: TOTAL_MS] 替换为实际总帧耗时
+        const TOTAL_MS = 1.0;
+
+        // [PLACEHOLDER: passes] 替换为实际 passes 数组
+        const passes = [
+            // { id: 'compute', label: 'Compute 预处理', time: 0.264, color: '#9b59b6', type: 'compute', deps: [], depType: [] },
+            // { id: 'pass1',   label: 'Pass 1: 主场景', time: 0.055, color: '#3498db', type: 'scene',   deps: ['compute'], depType: ['SSBO'] },
+            // ...
+        ];
+
+        // [PLACEHOLDER: groups] 替换为实际 groups 数组
+        const groups = [
+            // { label: 'Compute 预处理',        color: '#9b59b6', ids: ['compute'] },
+            // { label: '主场景渲染',             color: '#3498db', ids: ['pass1'] },
+            // ...
+        ];
+
+        // ══════════════════════════════════════════════════════════
+        // 以下为通用交互逻辑，无需修改
+        // ══════════════════════════════════════════════════════════
+
+        const passById = {};
+        passes.forEach(p => passById[p.id] = p);
+
+        // ── Tooltip ──
+        const tooltip = document.getElementById('tooltip');
+        const nodes = document.querySelectorAll('.node[data-pass]');
+
+        function showTooltip(e, node) {
+            const pass = node.dataset.pass;
+            const p = passById[pass];
+            if (!p) { tooltip.style.opacity = 0; return; }
+            const time = parseFloat(node.dataset.time) || 0;
+            const pct = parseFloat(node.dataset.pct) || 0;
+            const draws = node.dataset.draws || '0';
+            const dispatches = node.dataset.dispatches || '0';
+            const details = node.dataset.details || '';
+            const depNames = (p.deps || []).map(d => passById[d] ? passById[d].label : d).join(', ') || '无';
+            tooltip.innerHTML = `
+                <div class="tt-title">${p.label}</div>
+                <div class="tt-row"><span class="tt-label">GPU 耗时</span><span class="tt-value">${time.toFixed(3)}ms (${pct}%)</span></div>
+                <div class="tt-row"><span class="tt-label">Draw Calls</span><span class="tt-value">${draws}</span></div>
+                <div class="tt-row"><span class="tt-label">Dispatches</span><span class="tt-value">${dispatches}</span></div>
+                <div class="tt-bar"><div class="tt-bar-fill" style="width:${pct}%;background:${p.color || '#3498db'}"></div></div>
+                ${details ? '<div style="margin-top:8px;font-size:12px;color:#bdc3c7;">' + details.replace(/\|/g, '<br>') + '</div>' : ''}
+                <div class="tt-deps">依赖: ${depNames}</div>
+            `;
+            tooltip.style.opacity = 1;
+            positionTooltip(e);
+        }
+
+        function positionTooltip(e) {
+            const pad = 15;
+            let x = e.clientX + pad, y = e.clientY + pad;
+            const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+            if (x + w > window.innerWidth - 10) x = e.clientX - w - pad;
+            if (y + h > window.innerHeight - 10) y = e.clientY - h - pad;
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        nodes.forEach(node => {
+            node.addEventListener('mouseenter', e => showTooltip(e, node));
+            node.addEventListener('mousemove', e => positionTooltip(e));
+            node.addEventListener('mouseleave', () => { tooltip.style.opacity = 0; });
+        });
+
+        // ── 点击高亮依赖链 ──
+        let selectedPass = null;
+
+        function getAncestors(id, visited) {
+            visited = visited || new Set();
+            if (visited.has(id)) return visited;
+            visited.add(id);
+            const p = passById[id];
+            if (p && p.deps) p.deps.forEach(d => getAncestors(d, visited));
+            return visited;
+        }
+
+        function getDescendants(id, visited) {
+            visited = visited || new Set();
+            if (visited.has(id)) return visited;
+            visited.add(id);
+            passes.forEach(p => { if (p.deps && p.deps.includes(id)) getDescendants(p.id, visited); });
+            return visited;
+        }
+
+        function highlightPass(passId) {
+            selectedPass = passId;
+            const related = new Set();
+            getAncestors(passId, related);
+            getDescendants(passId, related);
+
+            nodes.forEach(n => {
+                if (related.has(n.dataset.pass)) { n.classList.add('highlighted'); n.classList.remove('dimmed'); }
+                else { n.classList.remove('highlighted'); n.classList.add('dimmed'); }
+            });
+            document.querySelectorAll('.arrow[data-from]').forEach(a => {
+                if (related.has(a.dataset.from) && related.has(a.dataset.to)) { a.classList.add('highlighted'); a.classList.remove('dimmed'); }
+                else { a.classList.remove('highlighted'); a.classList.add('dimmed'); }
+            });
+            document.querySelectorAll('.tl-segment').forEach(seg => {
+                if (related.has(seg.dataset.pass)) { seg.classList.add('highlighted'); seg.classList.remove('dimmed'); }
+                else { seg.classList.remove('highlighted'); seg.classList.add('dimmed'); }
+            });
+            const anno = document.querySelector('.data-flow-anno');
+            if (anno) anno.style.opacity = '0.1';
+        }
+
+        function clearHighlight() {
+            selectedPass = null;
+            nodes.forEach(n => { n.classList.remove('highlighted', 'dimmed'); });
+            document.querySelectorAll('.arrow[data-from]').forEach(a => { a.classList.remove('highlighted', 'dimmed'); });
+            document.querySelectorAll('.tl-segment').forEach(seg => { seg.classList.remove('highlighted', 'dimmed'); });
+            const anno = document.querySelector('.data-flow-anno');
+            if (anno) anno.style.opacity = '0.35';
+        }
+
+        nodes.forEach(node => {
+            node.addEventListener('click', e => {
+                e.stopPropagation();
+                const pid = node.dataset.pass;
+                if (selectedPass === pid) { clearHighlight(); return; }
+                highlightPass(pid);
+            });
+        });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') clearHighlight(); });
+        document.querySelector('.flowchart').addEventListener('click', e => {
+            if (!e.target.closest('.node')) clearHighlight();
+        });
+
+        // ── 类型筛选 ──
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const type = btn.dataset.type;
+                clearHighlight();
+                nodes.forEach(n => {
+                    if (type === 'all' || n.dataset.type === type) n.classList.remove('dimmed');
+                    else n.classList.add('dimmed');
+                });
+                document.querySelectorAll('.tl-segment').forEach(seg => {
+                    const p = passById[seg.dataset.pass];
+                    if (type === 'all' || (p && p.type === type)) seg.classList.remove('dimmed');
+                    else seg.classList.add('dimmed');
+                });
+                document.querySelectorAll('.arrow[data-from]').forEach(a => {
+                    const fn = document.querySelector(`.node[data-pass="${a.dataset.from}"]`);
+                    const tn = document.querySelector(`.node[data-pass="${a.dataset.to}"]`);
+                    if (type === 'all' || (fn && fn.dataset.type === type) || (tn && tn.dataset.type === type))
+                        a.classList.remove('dimmed');
+                    else a.classList.add('dimmed');
+                });
+            });
+        });
+
+        // ── 时间线（自动生成） ──
+        const tlBar = document.getElementById('timeline-bar');
+        const tlDetail = document.getElementById('timeline-detail');
+        const typeLabels = { compute:'Compute', scene:'场景', ui:'UI', postfx:'后处理', screen:'屏幕空间', composite:'合成', shadow:'阴影' };
+        let cumOffset = 0;
+
+        passes.forEach(p => {
+            const pct = (p.time / TOTAL_MS) * 100;
+            const seg = document.createElement('div');
+            seg.className = 'tl-segment';
+            seg.dataset.pass = p.id;
+            seg.style.left = (cumOffset / TOTAL_MS * 100) + '%';
+            seg.style.width = pct + '%';
+            seg.style.background = p.color;
+            seg.textContent = pct > 4 ? p.label.replace(/Pass \d+: /, '') : '';
+            seg.title = `${p.label}: ${p.time.toFixed(3)}ms (${(p.time/TOTAL_MS*100).toFixed(1)}%)`;
+            seg.addEventListener('mouseenter', () => {
+                tlDetail.innerHTML = `<strong>${p.label}</strong> &mdash; ${p.time.toFixed(3)}ms (${(p.time/TOTAL_MS*100).toFixed(1)}%) | 类型: ${typeLabels[p.type] || p.type}`;
+            });
+            seg.addEventListener('mouseleave', () => { tlDetail.textContent = '悬停时间线查看 Pass 详情'; });
+            seg.addEventListener('click', () => {
+                if (selectedPass === p.id) { clearHighlight(); return; }
+                highlightPass(p.id);
+                const node = document.querySelector(`.node[data-pass="${p.id}"]`);
+                if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            tlBar.appendChild(seg);
+            cumOffset += p.time;
+        });
+        if (cumOffset < TOTAL_MS) {
+            const seg = document.createElement('div');
+            seg.className = 'tl-segment';
+            seg.style.left = (cumOffset / TOTAL_MS * 100) + '%';
+            seg.style.width = ((TOTAL_MS - cumOffset) / TOTAL_MS * 100) + '%';
+            seg.style.background = '#95a5a6';
+            seg.textContent = '其他';
+            tlBar.appendChild(seg);
+        }
+
+        // ── 资源依赖分组卡片（自动生成） ──
+        const depFlow = document.getElementById('dep-flow');
+        const depTagClass = { Color: 'color-buf', Depth: 'depth-buf', SSBO: 'ssbo-buf' };
+
+        groups.forEach((g, gi) => {
+            if (gi > 0) {
+                const conn = document.createElement('div');
+                conn.className = 'dep-group-connector';
+                conn.innerHTML = '<svg width="24" height="20"><line x1="12" y1="0" x2="12" y2="14" stroke="#bdc3c7" stroke-width="2"/><polygon points="6,14 18,14 12,20" fill="#bdc3c7"/></svg>';
+                depFlow.appendChild(conn);
+            }
+            const group = document.createElement('div');
+            group.className = 'dep-group';
+            const header = document.createElement('div');
+            header.className = 'dep-group-header';
+            header.style.background = g.color;
+            const totalTime = g.ids.reduce((s, id) => s + (passById[id] ? passById[id].time : 0), 0);
+            header.innerHTML = `<span>${g.label}</span><span style="opacity:0.75;font-weight:400;font-size:12px;">${totalTime.toFixed(3)}ms (${(totalTime/TOTAL_MS*100).toFixed(1)}%)</span>`;
+            const body = document.createElement('div');
+            body.className = 'dep-group-body';
+            g.ids.forEach(id => {
+                const p = passById[id];
+                if (!p) return;
+                const node = document.createElement('div');
+                node.className = 'dep-node';
+                node.dataset.pass = id;
+                let html = `<strong>${p.label}</strong> <span class="dn-time" style="color:${p.color}">${p.time.toFixed(3)}ms</span>`;
+                if (p.deps && p.deps.length > 0) {
+                    const srcs = p.deps.map((depId, i) => {
+                        const src = passById[depId];
+                        const bufType = (p.depType && p.depType[i]) || 'Color';
+                        return `${src ? src.label : depId} <span class="dep-tag ${depTagClass[bufType] || 'color-buf'}">${bufType}</span>`;
+                    }).join(' + ');
+                    html += ` <span class="dn-arrow">&larr;</span> <span class="dn-src">${srcs}</span>`;
+                }
+                node.innerHTML = html;
+                node.addEventListener('click', () => {
+                    if (selectedPass === id) { clearHighlight(); return; }
+                    highlightPass(id);
+                    const svgNode = document.querySelector(`.node[data-pass="${id}"]`);
+                    if (svgNode) svgNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+                body.appendChild(node);
+            });
+            group.appendChild(header);
+            group.appendChild(body);
+            depFlow.appendChild(group);
+        });
+
+        // ── 滚轮缩放 ──
+        const svg = document.getElementById('main-svg');
+        let scale = 1;
+        svg.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            scale *= e.deltaY > 0 ? 0.95 : 1.05;
+            scale = Math.min(Math.max(0.5, scale), 2);
+            this.style.transform = `scale(${scale})`;
+            this.style.transformOrigin = 'top center';
+        });
+
+        // ── 键盘提示 ──
+        const kbdHint = document.getElementById('kbd-hint');
+        setTimeout(() => { kbdHint.style.opacity = 1; }, 1500);
+        setTimeout(() => { kbdHint.style.opacity = 0; }, 8000);
+    })();
+    </script>
+</body>
+</html>

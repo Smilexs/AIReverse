@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/zhengzs22120506/.claude/skills/unity-skills/**)",
+      "Read(E:/ZSGame/AIProjects/AIReverse/.claude/skills/**)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, ''scripts''\\); import unity_skills; print\\(unity_skills.get_server_status\\(\\)\\)\")",
+      "Bash(python -c \":*)",
+      "mcp__renderdoc__get_capture_status",
+      "mcp__renderdoc__get_frame_summary",
+      "mcp__renderdoc__get_draw_calls",
+      "mcp__renderdoc__get_action_timings",
+      "mcp__renderdoc__get_pipeline_state",
+      "mcp__renderdoc__get_shader_info",
+      "mcp__renderdoc__get_texture_info",
+      "mcp__renderdoc__get_texture_data",
+      "mcp__renderdoc__get_draw_call_details",
+      "mcp__renderdoc__get_buffer_contents",
+      "mcp__renderdoc__find_draws_by_shader",
+      "mcp__renderdoc__find_draws_by_texture",
+      "mcp__renderdoc__find_draws_by_resource",
+      "Bash(where codex:*)",
+      "Bash(npm list:*)",
+      "Bash(codex:*)",
+      "Bash(export PATH=\"/c/Users/zhengzs22120506/AppData/Roaming/npm:$PATH\")",
+      "Read(//c/Users/zhengzs22120506/AppData/Roaming/npm/**)",
+      "Read(//c/Users/zhengzs22120506/AppData/Roaming/npm//**)",
+      "Bash(PATH=\"/c/Users/zhengzs22120506/AppData/Roaming/npm:$PATH\" node -e \"process.env.PATH='/c/Users/zhengzs22120506/AppData/Roaming/npm;'+process.env.PATH; require\\('child_process'\\).execSync\\('codex --version',{stdio:'inherit'}\\)\")",
+      "Bash(npm info:*)"
+    ]
+  }
+}
